@@ -49,8 +49,7 @@ num_proto_short: 15            # Number of short-term prototypes K_S
 tau_proxy: 0.3
 tau_nce: 0.5
 lambda_align: 0.1    # modal_contrast_loss
-lambda_decor: 0.2   # modal_decorrelation_loss
-ema_alpha: 0.95
+ema_alpha: 0.99
 injection_weight: 0.1
 
 
