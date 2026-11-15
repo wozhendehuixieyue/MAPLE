@@ -10,13 +10,12 @@ class BERT4Rec(SequentialRecommender):
     def __init__(self, config, dataset):
         super(BERT4Rec, self).__init__(config, dataset)
 
-        # load parameters info
         self.n_layers = config["n_layers"]
         self.n_heads = config["n_heads"]
-        self.hidden_size = config["hidden_size"]  # same as embedding_size
+        self.hidden_size = config["hidden_size"]
         self.inner_size = config[
             "inner_size"
-        ]  # the dimensionality in feed-forward layer
+        ]
         self.hidden_dropout_prob = config["hidden_dropout_prob"]
         self.attn_dropout_prob = config["attn_dropout_prob"]
         self.hidden_act = config["hidden_act"]
@@ -32,17 +31,15 @@ class BERT4Rec(SequentialRecommender):
         self.loss_type = config["loss_type"]
         self.initializer_range = config["initializer_range"]
 
-        # load dataset info
         self.mask_token = self.n_items
         self.mask_item_length = int(self.mask_ratio * self.max_seq_length)
 
-        # define layers and loss
         self.item_embedding = nn.Embedding(
             self.n_items + 1, self.hidden_size, padding_idx=0
-        )  # mask token add 1
+        )
         self.position_embedding = nn.Embedding(
             self.max_seq_length, self.hidden_size
-        )  # add mask_token at the last
+        )
         self.trm_encoder = TransformerEncoder(
             n_layers=self.n_layers,
             n_heads=self.n_heads,
@@ -61,20 +58,15 @@ class BERT4Rec(SequentialRecommender):
         self.output_ln = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
         self.output_bias = nn.Parameter(torch.zeros(self.n_items))
 
-        # we only need compute the loss at the masked position
         try:
             assert self.loss_type in ["BPR", "CE"]
         except AssertionError:
             raise AssertionError("Make sure 'loss_type' in ['BPR', 'CE']!")
 
-        # parameters initialization
         self.apply(self._init_weights)
 
     def _init_weights(self, module):
-        """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.initializer_range)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -83,13 +75,10 @@ class BERT4Rec(SequentialRecommender):
             module.bias.data.zero_()
 
     def reconstruct_test_data(self, item_seq, item_seq_len):
-        """
-        Add mask token at the last position according to the lengths of item_seq
-        """
         padding = torch.zeros(
             item_seq.size(0), dtype=torch.long, device=item_seq.device
-        )  # [B]
-        item_seq = torch.cat((item_seq, padding.unsqueeze(-1)), dim=-1)  # [B max_len+1]
+        )
+        item_seq = torch.cat((item_seq, padding.unsqueeze(-1)), dim=-1)
         for batch_id, last_position in enumerate(item_seq_len):
             item_seq[batch_id][last_position] = self.mask_token
         item_seq = item_seq[:, 1:]
@@ -112,7 +101,7 @@ class BERT4Rec(SequentialRecommender):
         ffn_output = self.output_ffn(trm_output[-1])
         ffn_output = self.output_gelu(ffn_output)
         output = self.output_ln(ffn_output)
-        return output  # [B L H]
+        return output
 
     def multi_hot_embed(self, masked_index, max_length):
         masked_index = masked_index.view(-1)
@@ -131,13 +120,10 @@ class BERT4Rec(SequentialRecommender):
         seq_output = self.forward(masked_item_seq)
         pred_index_map = self.multi_hot_embed(
             masked_index, masked_item_seq.size(-1)
-        )  # [B*mask_len max_len]
-        # [B mask_len] -> [B mask_len max_len] multi hot
+        )
         pred_index_map = pred_index_map.view(
             masked_index.size(0), masked_index.size(1), -1
-        )  # [B mask_len max_len]
-        # [B mask_len max_len] * [B max_len H] -> [B mask_len H]
-        # only calculate loss for masked position
+        )
         seq_output = torch.bmm(pred_index_map, seq_output)  # [B mask_len H]
 
         if self.loss_type == "BPR":
@@ -195,8 +181,8 @@ class BERT4Rec(SequentialRecommender):
         seq_output = self.gather_indexes(seq_output, item_seq_len - 1)  # [B H]
         test_items_emb = self.item_embedding.weight[
             : self.n_items
-        ]  # delete masked token
+        ]
         scores = (
             torch.matmul(seq_output, test_items_emb.transpose(0, 1)) + self.output_bias
-        )  # [B, item_num]
+        )
         return scores

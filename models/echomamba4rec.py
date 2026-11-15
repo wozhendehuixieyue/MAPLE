@@ -14,7 +14,6 @@ class ECHOMamba4Rec(SequentialRecommender):
         self.num_layers = config["num_layers"]
         self.dropout_prob = config["dropout_prob"]
 
-        # Hyperparameters for Mamba block
         self.d_state = config["mamba_d_state"]
         self.d_conv = config["d_conv"]
         self.expand = config["expand"]
@@ -75,11 +74,11 @@ class ECHOMamba4Rec(SequentialRecommender):
             neg_items = interaction[self.NEG_ITEM_ID]
             pos_items_emb = self.item_embedding(pos_items)
             neg_items_emb = self.item_embedding(neg_items)
-            pos_score = torch.sum(seq_output * pos_items_emb, dim=-1)  # [B]
-            neg_score = torch.sum(seq_output * neg_items_emb, dim=-1)  # [B]
+            pos_score = torch.sum(seq_output * pos_items_emb, dim=-1)
+            neg_score = torch.sum(seq_output * neg_items_emb, dim=-1)
             loss = self.loss_fct(pos_score, neg_score)
             return loss
-        else:  # self.loss_type = 'CE'
+        else:
             test_item_emb = self.item_embedding.weight
             logits = torch.matmul(seq_output, test_item_emb.transpose(0, 1))
             loss = self.loss_fct(logits, pos_items)
@@ -91,7 +90,7 @@ class ECHOMamba4Rec(SequentialRecommender):
         test_item = interaction[self.ITEM_ID]
         seq_output = self.forward(item_seq, item_seq_len)
         test_item_emb = self.item_embedding(test_item)
-        scores = torch.mul(seq_output, test_item_emb).sum(dim=1)  # [B]
+        scores = torch.mul(seq_output, test_item_emb).sum(dim=1)
         return scores
 
     def full_sort_predict(self, interaction):
@@ -101,11 +100,10 @@ class ECHOMamba4Rec(SequentialRecommender):
         test_items_emb = self.item_embedding.weight
         scores = torch.matmul(
             seq_output, test_items_emb.transpose(0, 1)
-        )  # [B, n_items]
+        )
         return scores
 
 
-# 定义FFT层
 class FFTLayer(nn.Module):
     def __init__(self):
         super(FFTLayer, self).__init__()
@@ -114,7 +112,6 @@ class FFTLayer(nn.Module):
         return torch.fft.fft(x)
 
 
-# 定义逆FFT层
 class InverseFFTLayer(nn.Module):
     def __init__(self):
         super(InverseFFTLayer, self).__init__()
@@ -131,15 +128,12 @@ class LearnableHighpassFilter(nn.Module):
         self.filterh = nn.Parameter(torch.ones(input_size, dtype=torch.cfloat))
 
     def forward(self, input_f):
-        device = input_f.device  # 获取输入张量的设备信息
+        device = input_f.device
 
-        # 创建频率向量
         freqs = torch.fft.fftfreq(self.input_size, device=device)
 
-        # 创建高通滤波器
         highpass_filter = ((freqs >= self.cutoff_freq) | (freqs <= -self.cutoff_freq)).float()
 
-        # 应用滤波器
         output_f = input_f * highpass_filter + input_f * self.filterh
 
         return output_f
@@ -164,32 +158,26 @@ class MambaLayer(nn.Module):
         self.ffn = FeedForward(d_model=d_model, inner_size=d_model * 4, dropout=dropout)
         self.ac = nn.SiLU()
 
-        # 定义频域处理模块
         self.fft = FFTLayer()
         self.inverse_fft = InverseFFTLayer()
         self.learnable_filter = LearnableHighpassFilter(d_model)
         self.layer_norm = nn.LayerNorm(d_model)
 
     def forward(self, input_tensor):
-        # 频域处理模块
         x_fft = self.fft(input_tensor)
         x_filtered = self.learnable_filter(x_fft)
         x_ifft = self.inverse_fft(x_filtered)
         x_norm = self.layer_norm(x_ifft.real + input_tensor)
 
-        # GLU
         x_norm = self.l1(x_norm) * self.ac(self.l2(x_norm))
 
-        # 正反向Mamba
         x_reverse = torch.flip(x_norm, [1])
         mamba_output = self.mamba(x_norm)
         mamba_output_f = self.mamba(x_reverse)
         m = self.mamba(input_tensor)
-        # output = torch.cat((mamba_output, mamba_output_f), dim=2)  # 拼接维度调整为 dim=2
         output = mamba_output + mamba_output_f + m
         output = self.layer_norm1(output)
 
-        # 调整后的GLU
         h_b = self.dense1(output)
         h_b = self.ac(h_b)
         h_a = self.dense2(output)

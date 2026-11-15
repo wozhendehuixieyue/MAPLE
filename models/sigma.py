@@ -116,8 +116,6 @@ class GMambaBlock(nn.Module):
     def __init__(self, d_model, d_state, d_conv, expand):
         super(GMambaBlock, self).__init__()
         self.combining_weights = nn.Parameter(torch.tensor([0.1, 0.1, 0.8], dtype=torch.float32))
-        # self.weights = nn.Parameter(torch.tensor([0.5, 0.5], dtype=torch.float32))
-        # self.weights_f = nn.Parameter(torch.tensor([0.5, 0.5], dtype=torch.float32))
         self.dense1 = nn.Linear(d_model, d_model)
         self.dense2 = nn.Linear(d_model, d_model)
         self.projection = nn.Linear(d_model, d_model)
@@ -150,22 +148,16 @@ class GMambaBlock(nn.Module):
 
     def forward(self, input_tensor):
         self.gru.flatten_parameters()
-        combining_weights = F.softmax(self.combining_weights.data, dim=0)
-        # weights = F.softmax(self.weights.data, dim=0)
         h1 = self.dense1(input_tensor)
         g1 = self.conv1d(input_tensor.transpose(1, 2))
         g1 = g1.transpose(1, 2)
-        # gru_input = self.conv1d(g1)
 
-        # [2048, n, 64] 再进行反转
         flipped_input = input_tensor.clone()  # torch.Size([2048, 50, 64])
 
         flipped_input[:, :45, :] = input_tensor[:, :45, :].flip(dims=[1])
         h2 = flipped_input
         h2 = self.dense2(h2)
         h2 = self.dense2(flipped_input) + flipped_input
-        # [n,50,64] 再进行反转
-        # flipped_input[:2048, :, :] = input_tensor[:2048, :, :].flip(dims=[0])
         mamba_output_f = self.mamba(flipped_input)
         mamba_output = self.mamba(input_tensor)
         # mamba_output = self.LayerNorm(self.dropout(self.mamba(mamba_output)))

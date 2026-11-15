@@ -14,15 +14,14 @@ class FEARec(SequentialRecommender):
     def __init__(self, config, dataset):
         super(FEARec, self).__init__(config, dataset)
 
-        # load parameters info
         self.dataset = dataset
         self.config = config
         self.n_layers = config["n_layers"]
         self.n_heads = config["n_heads"]
-        self.hidden_size = config["hidden_size"]  # same as embedding_size
+        self.hidden_size = config["hidden_size"]
         self.inner_size = config[
             "inner_size"
-        ]  # the dimensionality in feed-forward layer
+        ]
         self.hidden_dropout_prob = config["hidden_dropout_prob"]
         self.attn_dropout_prob = config["attn_dropout_prob"]
         self.hidden_act = config["hidden_act"]
@@ -35,7 +34,6 @@ class FEARec(SequentialRecommender):
         self.loss_type = config["loss_type"]
         self.same_item_index = self.get_same_item_index(dataset)
 
-        # define layers and loss
         self.item_embedding = nn.Embedding(
             self.n_items, self.hidden_size, padding_idx=0
         )
@@ -72,7 +70,6 @@ class FEARec(SequentialRecommender):
         self.aug_nce_fct = nn.CrossEntropyLoss()
         self.sem_aug_nce_fct = nn.CrossEntropyLoss()
 
-        # parameters initialization
         self.apply(self._init_weights)
 
     def get_same_item_index(self, dataset):
@@ -88,10 +85,7 @@ class FEARec(SequentialRecommender):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.initializer_range)
-            # module.weight.data = self.truncated_normal_(tensor=module.weight.data, mean=0, std=self.initializer_range)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -109,12 +103,10 @@ class FEARec(SequentialRecommender):
             return tensor
 
     def get_attention_mask(self, item_seq):
-        """Generate left-to-right uni-directional attention mask for multi-head attention."""
         attention_mask = (item_seq > 0).long()
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(
             2
         )  # torch.int64
-        # mask for left-to-right unidirectional
         max_len = attention_mask.size(-1)
         attn_shape = (1, max_len, max_len)
         subsequent_mask = torch.triu(torch.ones(attn_shape), diagonal=1)  # torch.uint8
@@ -129,12 +121,10 @@ class FEARec(SequentialRecommender):
         return extended_attention_mask
 
     def get_bi_attention_mask(self, item_seq):
-        """Generate bidirectional attention mask for multi-head attention."""
         attention_mask = (item_seq > 0).long()
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(
             2
         )  # torch.int64
-        # bidirectional mask
         extended_attention_mask = extended_attention_mask.to(
             dtype=next(self.parameters()).dtype
         )  # fp16 compatibility
@@ -304,10 +294,6 @@ class FEARec(SequentialRecommender):
         return mask
 
     def info_nce(self, z_i, z_j, temp, batch_size, sim="dot"):
-        """
-        We do not sample negative examples explicitly.
-        Instead, given a positive pair, similar to (Chen et al., 2017), we treat the other 2(N − 1) augmented examples within a minibatch as negative examples.
-        """
         N = 2 * batch_size
 
         z = torch.cat((z_i, z_j), dim=0)
@@ -335,10 +321,6 @@ class FEARec(SequentialRecommender):
         return logits, labels
 
     def decompose(self, z_i, z_j, origin_z, batch_size):
-        """
-        We do not sample negative examples explicitly.
-        Instead, given a positive pair, similar to (Chen et al., 2017), we treat the other 2(N − 1) augmented examples within a minibatch as negative examples.
-        """
         N = 2 * batch_size
 
         z = torch.cat((z_i, z_j), dim=0)
@@ -380,17 +362,6 @@ class FEARec(SequentialRecommender):
 
 
 class HybridAttention(nn.Module):
-    """
-    Hybrid Attention layer: combine time domain self-attention layer and frequency domain attention layer.
-
-    Args:
-        input_tensor (torch.Tensor): the input of the multi-head Hybrid Attention layer
-        attention_mask (torch.Tensor): the attention mask for input tensor
-
-    Returns:
-        hidden_states (torch.Tensor): the output of the multi-head Hybrid Attention layer
-
-    """
 
     def __init__(
         self,
@@ -498,10 +469,6 @@ class HybridAttention(nn.Module):
         return x
 
     def time_delay_agg_training(self, values, corr):
-        """
-        SpeedUp version of Autocorrelation (a batch-normalization style design)
-        This is for the training phase.
-        """
         head = values.shape[1]
         channel = values.shape[2]
         length = values.shape[3]
@@ -527,10 +494,7 @@ class HybridAttention(nn.Module):
         return delays_agg
 
     def time_delay_agg_inference(self, values, corr):
-        """
-        SpeedUp version of Autocorrelation (a batch-normalization style design)
-        This is for the inference phase.
-        """
+
         batch = values.shape[0]
         head = values.shape[1]
         channel = values.shape[2]
@@ -694,16 +658,6 @@ class HybridAttention(nn.Module):
 
 
 class FeedForward(nn.Module):
-    """
-    Point-wise feed-forward layer is implemented by two dense layers.
-
-    Args:
-        input_tensor (torch.Tensor): the input of the point-wise feed-forward layer
-
-    Returns:
-        hidden_states (torch.Tensor): the output of the point-wise feed-forward layer
-
-    """
 
     def __init__(
         self, hidden_size, inner_size, hidden_dropout_prob, hidden_act, layer_norm_eps
@@ -727,14 +681,6 @@ class FeedForward(nn.Module):
         return ACT2FN[act]
 
     def gelu(self, x):
-        """Implementation of the gelu activation function.
-
-        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results)::
-
-            0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-
-        Also see https://arxiv.org/abs/1606.08415
-        """
         return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
     def swish(self, x):
@@ -752,18 +698,6 @@ class FeedForward(nn.Module):
 
 
 class FEABlock(nn.Module):
-    """
-    One transformer layer consists of a multi-head self-attention layer and a point-wise feed-forward layer.
-
-    Args:
-        hidden_states (torch.Tensor): the input of the multi-head self-attention sublayer
-        attention_mask (torch.Tensor): the attention mask for the multi-head self-attention sublayer
-
-    Returns:
-        feedforward_output (torch.Tensor): The output of the point-wise feed-forward sublayer,
-                                           is the output of the transformer layer.
-
-    """
 
     def __init__(
         self,
@@ -803,19 +737,6 @@ class FEABlock(nn.Module):
 
 
 class FEAEncoder(nn.Module):
-    r"""One TransformerEncoder consists of several TransformerLayers.
-
-    - n_layers(num): num of transformer layers in transformer encoder. Default: 2
-    - n_heads(num): num of attention heads for multi-head attention layer. Default: 2
-    - hidden_size(num): the input and output hidden size. Default: 64
-    - inner_size(num): the dimensionality in feed-forward layer. Default: 256
-    - hidden_dropout_prob(float): probability of an element to be zeroed. Default: 0.5
-    - attn_dropout_prob(float): probability of an attention score to be zeroed. Default: 0.5
-    - hidden_act(str): activation function in feed-forward layer. Default: 'gelu'
-                  candidates: 'gelu', 'relu', 'swish', 'tanh', 'sigmoid'
-    - layer_norm_eps(float): a value added to the denominator for numerical stability. Default: 1e-12
-
-    """
 
     def __init__(
         self,
