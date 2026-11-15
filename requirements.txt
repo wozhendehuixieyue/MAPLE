@@ -1,0 +1,24 @@
+# Recommendation Framework
+recbole==1.2.1
+
+# State Space Models (Core)
+causal-conv1d==1.5.4
+mamba-ssm==2.2.6.post3
+einops==0.8.1
+
+# Deep Learning & Data Processing
+numpy==1.26.4
+pandas==2.3.3
+scikit-learn==1.7.2
+scipy==1.15.3
+transformers==4.57.3
+
+# Experiment Tracking & Visualization
+wandb==0.25.1
+matplotlib==3.10.8
+tensorboard==2.20.0
+
+# Utils
+tqdm==4.67.1
+PyYAML==6.0.3
+colorlog==4.7.2
