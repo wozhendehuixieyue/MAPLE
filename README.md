@@ -56,6 +56,11 @@ The hardware and software we used are listed below to facilitate the environment
 
 ----
 
+## Project Structure
+You can download the raw dataset that needs to be preprocessed from https://github.com/RUCAIBox/RecSysDatasets, or download the preprocessed atomic files directly via the Baidu disk or Google Drive links provided by Recbole.
+
+----
+
 ## Hyperparameters (`config.yaml`)
 
 | Parameter | Type | Description |
