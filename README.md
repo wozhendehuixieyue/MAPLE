@@ -27,7 +27,7 @@ MAPLE
     *   **Long-term Stream**: Powered by **Mamba** blocks to capture long-range dependencies with linear complexity.
     *   **Short-term Stream**: Powered by **GRU** to focus on local dynamics at the end of the sequence (controlled by `short_seq_len_ratio`).
 2.  **Global Interest Prototypes**:
-    *   Maintains long/short-term prototype matrices ($P_L$, $P_S$) representing latent global user intents.
+    *   Maintains long/short-term prototype matrices ($P_lt$, $P_st$) representing latent global user intents.
     *   **EMA Update Mechanism**: Prototypes are updated via hard assignment and Exponential Moving Average (EMA) instead of backpropagation, ensuring stable cluster evolution.
 3.  **Prototype Injection**:
     *   Extracts "Soft Proxies" using attention mechanisms to inject global intent information back into local user representations.
